@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Te Amo Mucho, Lo Siento</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Alex+Brush&family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #050114; /* Deep night sky */
+            font-family: 'Montserrat', sans-serif;
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: none; /* Let clicks pass through to canvas */
+        }
+
+        .text-container {
+            text-align: center;
+            opacity: 0;
+            transform: translateY(30px);
+            animation: fadeInUp 3s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+            animation-delay: 0.5s; /* Aparece más rápido */
+            width: 100vw;
+            padding: 0 20px; /* Un poco de margen a los lados para que no choque */
+            box-sizing: border-box;
+        }
+
+        h1 {
+            font-family: 'Alex Brush', cursive;
+            font-size: clamp(40px, 12vw, 130px) !important; /* TAMAÑO GRANDE PERO CONTROLADO */
+            color: #ff9a9e;
+            margin: 0;
+            line-height: 0.9;
+            text-shadow: 0 0 20px rgba(255, 154, 158, 0.6), 0 0 40px rgba(255, 154, 158, 0.4);
+            background: -webkit-linear-gradient(45deg, #ff9a9e, #fecfef, #ff9a9e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0px 0px 10px rgba(255, 154, 158, 0.5));
+            width: 100%;
+        }
+
+        h2 {
+            font-family: 'Montserrat', sans-serif;
+            font-weight: bold;
+            font-size: clamp(20px, 6vw, 60px) !important; /* MÁS PEQUEÑO QUE H1, CONTROLADO */
+            color: #e2e2e2;
+            margin-top: 1rem;
+            line-height: 1;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+            animation: pulse 4s infinite alternate;
+            width: 100%;
+        }
+
+        @keyframes fadeInUp {
+            0% {
+                opacity: 0;
+                transform: translateY(40px) scale(0.95);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.7; transform: scale(1); }
+            100% { opacity: 1; transform: scale(1.02); }
+        }
+
+        /* Responsive typography */
+        @media (max-width: 768px) {
+            h1 { line-height: 0.9; font-size: 15vw !important; }
+            h2 { letter-spacing: 0.02em; margin-top: 1rem; font-size: 7vw !important; }
+            .text-container { transform: translateY(-20px); }
+        }
+        
+        .overlay-gradient {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 40%;
+            background: linear-gradient(to top, rgba(5, 1, 20, 1) 0%, rgba(5, 1, 20, 0) 100%);
+            z-index: 2;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container">
+        <canvas id="mainCanvas"></canvas>
+    </div>
+    
+    <div class="overlay-gradient"></div>
+
+    <div id="ui-layer">
+        <div class="text-container" style="margin-top: -35vh; pointer-events: none;">
+            <h1>Te amo mucho,<br>Sandy</h1>
+            <h2>Lo siento</h2>
+        </div>
+        
+        <!-- Botón de acción con pointer-events-auto para que sea clickeable -->
+        <button id="action-btn" style="pointer-events: auto; z-index: 9999;" class="absolute bottom-10 bg-gradient-to-r from-pink-500 to-rose-500 text-white font-bold py-4 px-10 rounded-full shadow-[0_0_20px_rgba(236,72,153,0.7)] hover:shadow-[0_0_40px_rgba(236,72,153,1)] hover:scale-110 transition-all duration-300 text-3xl font-sans tracking-wide cursor-pointer">
+            ¡Dale clic!
+        </button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let width, height;
+        let items = []; // Para las flores y pétalos que lanza
+        let fireflies = [];
+        
+        // Mouse interaction for wind effect
+        let mouseX = 0;
+        let targetWind = 0;
+        let currentWind = 0;
+
+        // Variables para el control de tiempo de flores
+        let lastThrowTime = 0;
+        let isThrowing = false; // Control de estado por botón
+
+        // Posición central del personaje
+        let bx, by;
+
+        // Initialize and handle resizing
+        function init() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+
+            bx = width / 2;
+            by = height - (height * 0.25); // Posicionarlo un poco más abajo
+
+            createFireflies(80);
+        }
+
+        window.addEventListener('resize', () => {
+            init();
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            // Calculate wind based on mouse position relative to center
+            targetWind = ((mouseX / width) - 0.5) * 5; 
+        });
+        
+        window.addEventListener('touchmove', (e) => {
+            mouseX = e.touches[0].clientX;
+            targetWind = ((mouseX / width) - 0.5) * 5; 
+        });
+
+        // --- Classes ---
+
+        class Firefly {
+            constructor() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.size = Math.random() * 2 + 0.5;
+                this.speedX = (Math.random() - 0.5) * 0.5;
+                this.speedY = (Math.random() - 0.5) * 0.5;
+                this.life = Math.random() * Math.PI * 2; // For pulsing alpha
+            }
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                this.life += 0.02;
+
+                if (this.x < 0) this.x = width;
+                if (this.x > width) this.x = 0;
+                if (this.y < 0) this.y = height;
+                if (this.y > height) this.y = 0;
+            }
+            draw() {
+                let alpha = (Math.sin(this.life) + 1) / 2 * 0.8 + 0.2;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 230, 150, ${alpha})`;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#ffe696';
+                ctx.fill();
+                ctx.shadowBlur = 0; // Reset
+            }
+        }
+
+        class ThrownItem {
+            constructor(x, y) {
+                this.x = x + (Math.random() - 0.5) * 40;
+                this.y = y + (Math.random() - 0.5) * 20;
+                
+                let randomType = Math.random();
+                this.isKiss = randomType > 0.6; // 40% besos (corazones)
+                this.isFlower = randomType > 0.3 && randomType <= 0.6; // 30% flores enteras
+                // el resto 30% son pétalos
+                
+                this.size = this.isFlower ? (Math.random() * 12 + 12) : (Math.random() * 8 + 8);
+                if (this.isKiss) this.size = Math.random() * 15 + 10;
+                
+                // Movimiento más lento, suave y flotante
+                this.speedX = (Math.random() - 0.5) * 12; // Rango más amplio de explosión
+                this.speedY = -(Math.random() * 12 + 8);  // Vuelan más alto
+                this.gravity = 0.06 + Math.random() * 0.04; // Gravedad muy baja para que floten
+                
+                this.angle = Math.random() * 360;
+                this.spin = (Math.random() - 0.5) * 5;
+                
+                // Colores pastel románticos
+                const colors = ['#ffb3ba', '#ffdfba', '#ffffba', '#baffc9', '#bae1ff', '#e8baff', '#f4c2c2', '#fecfef'];
+                this.color = colors[Math.floor(Math.random() * colors.length)];
+            }
+            update() {
+                this.speedY += this.gravity;
+                this.x += this.speedX + currentWind;
+                this.y += this.speedY;
+                this.angle += this.spin;
+            }
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.angle * Math.PI / 180);
+                
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = this.color;
+
+                if (this.isFlower) {
+                    // Dibujar flor entera
+                    for(let i=0; i<5; i++) {
+                        ctx.rotate(Math.PI*2 / 5);
+                        ctx.beginPath();
+                        ctx.arc(0, -this.size/1.5, this.size/1.5, 0, Math.PI*2);
+                        ctx.fillStyle = this.color;
+                        ctx.fill();
+                    }
+                    ctx.beginPath();
+                    ctx.arc(0, 0, this.size/2.5, 0, Math.PI*2);
+                    ctx.fillStyle = '#fff';
+                    ctx.shadowColor = '#fff';
+                    ctx.fill();
+                } else if (this.isKiss) {
+                    // Dibujar beso / corazón
+                    ctx.fillStyle = '#ff3366';
+                    ctx.shadowColor = '#ff3366';
+                    ctx.beginPath();
+                    let topCurveHeight = this.size * 0.3;
+                    ctx.moveTo(0, topCurveHeight);
+                    ctx.bezierCurveTo(-this.size / 2, -this.size / 2, -this.size, topCurveHeight, 0, this.size);
+                    ctx.bezierCurveTo(this.size, topCurveHeight, this.size / 2, -this.size / 2, 0, topCurveHeight);
+                    ctx.closePath();
+                    ctx.fill();
+                } else {
+                    // Dibujar pétalo
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    ctx.bezierCurveTo(this.size, -this.size, this.size * 2, 0, 0, this.size * 2);
+                    ctx.bezierCurveTo(-this.size * 2, 0, -this.size, -this.size, 0, 0);
+                    ctx.fillStyle = this.color;
+                    ctx.globalAlpha = 0.9;
+                    ctx.fill();
+                }
+                
+                ctx.restore();
+            }
+        }
+
+        // --- Setup Functions ---
+
+        function createFireflies(count) {
+            fireflies = [];
+            for (let i = 0; i < count; i++) {
+                fireflies.push(new Firefly());
+            }
+        }
+
+        // Dibuja al hombrecito saltando (Mejorado)
+        function drawChubbyMan(x, y, time) {
+            ctx.save();
+            
+            // Físicas de salto (lentas por defecto, muy rápidas al lanzar)
+            let jumpSpeed = isThrowing ? 120 : 400;
+            let jumpCycle = time / jumpSpeed;
+            let jump = Math.abs(Math.sin(jumpCycle)) * (isThrowing ? -40 : -15); 
+            let armSwing = Math.sin(jumpCycle) * (isThrowing ? 2.5 : 1.2); 
+            
+            // Sombra en el piso que se achica al saltar
+            let shadowScale = 1 - (Math.abs(jump) / 60);
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.beginPath();
+            ctx.ellipse(x, by + 65, 50 * shadowScale, 15 * shadowScale, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Mover contexto al personaje saltando
+            ctx.translate(x, y + jump);
+            ctx.shadowBlur = 0; 
+
+            const skinColor = '#faddc5';
+            const suitColor = '#1a252f'; // Terno más oscuro para contrastar
+            const shirtColor = '#ffffff';
+
+            // 0. Zapatitos pequeños
+            ctx.fillStyle = '#000';
+            ctx.beginPath(); ctx.ellipse(-14, 60, 12, 6, 0, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(14, 60, 12, 6, 0, 0, Math.PI*2); ctx.fill();
+
+            // 1. Pantalones del terno apretado
+            ctx.fillStyle = suitColor; 
+            ctx.fillRect(-22, 30, 16, 30); // Pierna izq
+            ctx.fillRect(6, 30, 16, 30); // Pierna der
+
+            // Borde del pantalón debajo de la panza (sin cinturón)
+            ctx.beginPath();
+            ctx.arc(0, 36, 25, 0, Math.PI, false); 
+            ctx.fill();
+
+            // 2. La pancita al aire (Camisa no cubre)
+            ctx.fillStyle = skinColor; 
+            ctx.beginPath();
+            ctx.arc(0, 15, 45, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Ombligo (Pupu)
+            ctx.fillStyle = '#d3b29c';
+            ctx.beginPath(); ctx.arc(0, 26, 4, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#a87b5d'; // Sombra y profundidad del ombligo
+            ctx.beginPath(); ctx.arc(0, 26, 2, 0, Math.PI*2); ctx.fill();
+
+            // Varios pelitos en el estómago
+            ctx.strokeStyle = '#5c3a21'; // Mismo color de barba
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for(let i = 0; i < 18; i++) {
+                // Distribuir pelitos usando matemáticas deterministas para que no tiemblen
+                let px = Math.sin(i * 13) * 20; 
+                let py = 15 + Math.abs(Math.cos(i * 7)) * 25; 
+                ctx.moveTo(px, py);
+                ctx.quadraticCurveTo(px + 2, py + 3, px - 1, py + 5);
+            }
+            ctx.stroke();
+
+            // Mejoramos el sombreado general de la panza para darle volumen 3D
+            let grad = ctx.createRadialGradient(0, 15, 30, 0, 15, 45);
+            grad.addColorStop(0, 'rgba(0,0,0,0)');
+            grad.addColorStop(1, 'rgba(0,0,0,0.12)');
+            ctx.fillStyle = grad;
+            ctx.beginPath(); ctx.arc(0, 15, 45, 0, Math.PI*2); ctx.fill();
+
+            // 3. Camisa (muy chica, botones tensos)
+            ctx.fillStyle = shirtColor;
+            ctx.beginPath();
+            ctx.arc(0, -10, 40, Math.PI, Math.PI * 2); // Mitad superior de la panza
+            ctx.fill();
+            ctx.fillRect(-40, -30, 80, 20); // Pecho
+            
+            // Botones tensos a punto de saltar
+            ctx.fillStyle = '#000';
+            ctx.beginPath(); ctx.arc(0, -20, 2, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(0, -5, 2, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#ddd'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(-5, -20); ctx.lineTo(5, -20); ctx.stroke(); // Pliegue de tensión
+
+            // 4. Corbata diminuta cómica
+            ctx.fillStyle = '#e74c3c'; 
+            ctx.beginPath();
+            ctx.moveTo(-7, -30);
+            ctx.lineTo(7, -30);
+            ctx.lineTo(4, -5);
+            ctx.lineTo(0, 5);
+            ctx.lineTo(-4, -5);
+            ctx.fill();
+
+            // 5. Saco del terno (Que no cierra ni de chiste)
+            ctx.fillStyle = suitColor;
+            // Solapa Izquierda
+            ctx.beginPath();
+            ctx.moveTo(-42, -32);
+            ctx.lineTo(-18, -32);
+            ctx.lineTo(-30, 10);
+            ctx.lineTo(-46, 5);
+            ctx.fill();
+            // Solapa Derecha
+            ctx.beginPath();
+            ctx.moveTo(42, -32);
+            ctx.lineTo(18, -32);
+            ctx.lineTo(30, 10);
+            ctx.lineTo(46, 5);
+            ctx.fill();
+
+            // 6. Cabeza y Orejas
+            ctx.fillStyle = skinColor;
+            ctx.beginPath(); ctx.arc(-26, -55, 6, 0, Math.PI*2); ctx.fill(); // Oreja L
+            ctx.beginPath(); ctx.arc(26, -55, 6, 0, Math.PI*2); ctx.fill(); // Oreja R
+            ctx.beginPath();
+            ctx.arc(0, -55, 26, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Sonrojo tierno por la vergüenza
+            ctx.fillStyle = 'rgba(255, 100, 100, 0.4)';
+            ctx.beginPath(); ctx.arc(-15, -48, 6, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(15, -48, 6, 0, Math.PI*2); ctx.fill();
+
+            // 7. Barba pronunciada
+            ctx.fillStyle = '#5c3a21'; 
+            ctx.beginPath();
+            ctx.arc(0, -50, 28, 0, Math.PI); // Curva inferior
+            ctx.lineTo(20, -65); 
+            ctx.lineTo(10, -52);
+            ctx.lineTo(0, -58);  // Bigote bajando al centro
+            ctx.lineTo(-10, -52);
+            ctx.lineTo(-20, -65);
+            ctx.fill();
+
+            // 8. Ojos de súplica con brillo
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath(); ctx.moveTo(-16, -64); ctx.lineTo(-6, -60); ctx.stroke(); // Ceja angustia L
+            ctx.beginPath(); ctx.moveTo(16, -64); ctx.lineTo(6, -60); ctx.stroke(); // Ceja angustia R
+            ctx.fillStyle = '#000';
+            ctx.beginPath(); ctx.arc(-10, -56, 3, 0, Math.PI*2); ctx.fill(); // Ojo L
+            ctx.beginPath(); ctx.arc(10, -56, 3, 0, Math.PI*2); ctx.fill(); // Ojo R
+            
+            // Brillo en los ojos (para dar ternura)
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.arc(-11, -57, 1, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(9, -57, 1, 0, Math.PI*2); ctx.fill();
+
+            // 9. Brazos lanzando flores
+            ctx.strokeStyle = suitColor;
+            ctx.lineWidth = 16;
+            ctx.lineCap = 'round';
+            
+            // Brazo Izquierdo
+            ctx.save();
+            ctx.translate(-42, -20);
+            ctx.rotate(-2.2 + armSwing);
+            ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0, 40); ctx.stroke();
+            // Mano
+            ctx.fillStyle = skinColor; ctx.beginPath(); ctx.arc(0, 40, 8, 0, Math.PI*2); ctx.fill(); 
+            ctx.restore();
+
+            // Brazo Derecho
+            ctx.save();
+            ctx.translate(42, -20);
+            ctx.rotate(2.2 - armSwing);
+            ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0, 40); ctx.stroke();
+            // Mano
+            ctx.fillStyle = skinColor; ctx.beginPath(); ctx.arc(0, 40, 8, 0, Math.PI*2); ctx.fill(); 
+            ctx.restore();
+
+            ctx.restore();
+            
+            // Devolvemos el ciclo para sincronizar las flores con los brazos
+            return Math.sin(jumpCycle);
+        }
+
+        // --- Main Loop ---
+
+        function animate() {
+            // Fondo semitransparente para estelas
+            ctx.fillStyle = 'rgba(5, 1, 20, 0.4)';
+            ctx.fillRect(0, 0, width, height);
+
+            // Dibujar un camino romántico iluminado
+            ctx.fillStyle = 'rgba(255, 200, 220, 0.05)'; 
+            ctx.beginPath();
+            ctx.moveTo(width / 2 - 40, by - 60); 
+            ctx.bezierCurveTo(width / 2 - 150, by + 50, width / 2 - 400, height, 0, height);
+            ctx.lineTo(width, height);
+            ctx.bezierCurveTo(width / 2 + 400, height, width / 2 + 150, by + 50, width / 2 + 40, by - 60);
+            ctx.fill();
+
+            // Viento interactivo
+            currentWind += (targetWind - currentWind) * 0.02;
+
+            // Dibujar luciérnagas
+            fireflies.forEach(firefly => {
+                firefly.update();
+                firefly.draw();
+            });
+
+            // Dibujar al Gordito Barbudo y obtener la posición de sus brazos
+            let time = Date.now();
+            let armPhase = drawChubbyMan(bx, by, time);
+
+            // Lanza MUCHÍSIMAS flores y besos solo si se presionó el botón
+            if (isThrowing && armPhase > 0.8 && (time - lastThrowTime > 80)) {
+                // Disparo de ráfaga
+                items.push(new ThrownItem(bx - 45, by - 70)); 
+                items.push(new ThrownItem(bx + 45, by - 70));
+                items.push(new ThrownItem(bx - 20, by - 80)); 
+                items.push(new ThrownItem(bx + 20, by - 80));
+                lastThrowTime = time;
+            }
+
+            // Actualizar y dibujar las flores/pétalos lanzados
+            for (let i = items.length - 1; i >= 0; i--) {
+                let item = items[i];
+                item.update();
+                item.draw();
+                
+                // Borrar las flores que ya cayeron de la pantalla
+                if (item.y > height + 50) {
+                    items.splice(i, 1);
+                }
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // Evento del botón para lanzar flores
+        const actionBtn = document.getElementById('action-btn');
+        const startThrowing = function(e) {
+            if (e) e.preventDefault(); // Evita doble toque en celulares
+            isThrowing = true;
+            // Desaparecer el botón con estilo
+            actionBtn.style.transform = 'scale(0)';
+            actionBtn.style.opacity = '0';
+            setTimeout(() => { actionBtn.style.display = 'none'; }, 300);
+        };
+
+        actionBtn.addEventListener('click', startThrowing);
+        actionBtn.addEventListener('touchstart', startThrowing, {passive: false});
+
+        // Iniciar animación directo (ya no hay pantalla de inicio)
+        init();
+        animate();
+
+    </script>
+</body>
+</html>
